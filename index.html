@@ -18,7 +18,7 @@ main{max-width:640px;margin:0 auto;padding:18px 16px}
 h1{font-size:13px;font-weight:800;color:var(--main);margin:6px 0 14px;letter-spacing:.14em}
 h2{font-size:18px;margin:24px 0 10px;font-weight:800}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:var(--sh)}
-.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-app{border-top:5px solid #14b8a6}.card.c-deuda{border-top:5px solid #e11d48}.card.c-zelle{border-top:5px solid #8b5cf6}
+.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-app{border-top:5px solid #14b8a6}.card.c-deuda{border-top:5px solid #e11d48}.card.c-mentor{border-top:5px solid #f59e0b}.card.c-zelle{border-top:5px solid #8b5cf6}
 .hero{background:var(--grad);color:#fff;border:0;box-shadow:0 14px 34px rgba(124,58,237,.38);position:relative;overflow:hidden}
 .hero:after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.14)}
 .hero.bad{background:linear-gradient(135deg,#e11d48,#f97316);box-shadow:0 14px 34px rgba(225,29,72,.35)}
@@ -83,7 +83,7 @@ const CATS = [
   ["Comer afuera","🍔"],["Salidas","🎉"],["Gasolina","⛽"],["Mercado","🛒"],
   ["Salud y gym","💪"],["Negocio","💼"],["Apps","📱"],["Personal","🧴"],["Otros","📦"]
 ];
-const ICO = Object.fromEntries(CATS.concat([["Deudas","💳"],["Ingreso","💰"],["Servicios","🏠"]]));
+const ICO = Object.fromEntries(CATS.concat([["Deudas","💳"],["Ingreso","💰"],["Servicios","🏠"],["Mentoría","🎓"]]));
 const ING_CATS = [["Pago","💰"],["Ventas","🛍️"],["Otro ingreso","🎁"]];
 ING_CATS.forEach(([n,i]) => ICO[n] = i);
 const CALLE = ["Comer afuera","Salidas"];
@@ -104,7 +104,8 @@ const DEF_APPS = [
   {id:"a7",nombre:"CapCut",monto:9.99,cat:"Apps",ico:"🎬",app:true,grupo:"social"},
   {id:"a8",nombre:"Google Drive",monto:2.99,cat:"Apps",ico:"📁",app:true,grupo:"social"}
 ];
-const planBase = () => ({fijos:JSON.parse(JSON.stringify(DEF_FIJOS.concat(DEF_APPS))), gasTope:30, calleTope:45, ingresos:{}});
+const DEF_MENTOR = [{id:"m1",nombre:"Ismael",monto:200,cat:"Mentoría",ico:"🎓",mentor:true}];
+const planBase = () => ({fijos:JSON.parse(JSON.stringify(DEF_FIJOS.concat(DEF_APPS,DEF_MENTOR))), gasTope:30, calleTope:45, ingresos:{}});
 // una sola vez: agrega las apps de fábrica sin duplicar las que ya tenías
 function migraApps(cfg){
   if(cfg.appsV2) return cfg;
@@ -116,9 +117,16 @@ function migraApps(cfg){
   return {...cfg, fijos, appsV2:true};
 }
 
+function migraMentor(cfg){
+  if(cfg.mentoriaV1) return cfg;
+  const fijos = cfg.fijos.map(f => ({...f}));
+  if(!fijos.some(f => f.mentor)) DEF_MENTOR.forEach(m => fijos.push({...m}));
+  return {...cfg, fijos, mentoriaV1:true};
+}
+
 // ---------- datos ----------
 let D = load();
-function normaliza(d){ return {...d, cfg: d.cfg ? migraApps({...planBase(), ...d.cfg}) : null, movs: d.movs||[], deudas: d.deudas||[]}; }
+function normaliza(d){ return {...d, cfg: d.cfg ? migraMentor(migraApps({...planBase(), ...d.cfg})) : null, movs: d.movs||[], deudas: d.deudas||[]}; }
 function load(){
   try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d && d.cfg) return normaliza(d); }catch{}
   return {cfg:null, movs:[], deudas:[]};
@@ -389,9 +397,9 @@ function zAviso(){
 function vGastos(){
   const c = calc(), cfg = D.cfg;
   const grupoApps = GRUPOS.concat([["otras","Otras apps","📱"]]);
-  const fijoRow = f => `<div class="mov" data-fijo="${f.id}"><div class="ico">${f.ico||"📌"}</div><div class="t"><b>${esc(f.nombre)}</b><span>${f.aprox?"Aproximado · cambia con la tasa":"Fijo"}</span></div><div style="text-align:right"><div class="amt">${fmt(f.pagado?f.real:f.monto)}</div><span class="pill ${f.pagado?"":"warn"}">${f.pagado?"Pagado ✓":"Pendiente"}</span></div><button data-fijoedit="${f.id}" aria-label="Editar" style="border:0;background:none;font-size:18px">✏️</button></div>`;
+  const fijoRow = f => `<div class="mov" data-fijo="${f.id}"><div class="ico">${f.ico||"📌"}</div><div class="t"><b>${esc(f.nombre)}</b><span>${f.aprox?"Aproximado · cambia con la tasa":f.mentor?"Mentoría":"Fijo"}</span></div><div style="text-align:right"><div class="amt">${fmt(f.pagado?f.real:f.monto)}</div><span class="pill ${f.pagado?"":"warn"}">${f.pagado?"Pagado ✓":"Pendiente"}</span></div><button data-fijoedit="${f.id}" aria-label="Editar" style="border:0;background:none;font-size:18px">✏️</button></div>`;
   const fx = cfg.fijos.map(f => { const pagos = c.delMes.filter(m=>m.fijoId===f.id); return {...f, pagado: pagos.length>0, real: sum(pagos,m=>m.m)}; });
-  const fxF = fx.filter(f=>!f.app), fxA = fx.filter(f=>f.app);
+  const fxF = fx.filter(f=>!f.app&&!f.mentor), fxA = fx.filter(f=>f.app), fxM = fx.filter(f=>f.mentor);
   const totalFijos = sum(fxF, f => f.pagado ? f.real : f.monto), pagadoFijos = sum(fxF.filter(f=>f.pagado), f=>f.real);
   const totalApps = sum(fxA, f => f.pagado ? f.real : f.monto), pagadoApps = sum(fxA.filter(f=>f.pagado), f=>f.real);
   const appsMes = sum(c.gastos.filter(m=>m.cat==="Apps"), m=>m.m);
@@ -415,6 +423,12 @@ function vGastos(){
         return `<div class="row" style="margin-top:16px"><b>${ic} ${n}</b><span class="pill">${fmt(sum(l,f=>f.monto))} al mes</span></div>${l.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay apps aquí.</div>`}<button class="btn sec sm" data-appadd="${k}" style="margin-top:8px">+ Agregar en ${n.replace("Apps de ","").replace("Apps ","")}</button>`; }).join("")}
     </div>
     ${zelleCard()}
+    <div class="card c-mentor">
+      <div class="row"><b>🎓 Pago de mentoría</b><span class="pill ${fxM.every(f=>f.pagado)?"":"warn"}">${fxM.filter(f=>f.pagado).length} de ${fxM.length} pagadas</span></div>
+      <div class="lbl" style="margin:4px 0 6px">Este mes: <b>${fmt(sum(fxM,f=>f.pagado?f.real:f.monto))}</b>. Toca una para marcarla como pagada.</div>
+      ${fxM.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay mentorías.</div>`}
+      <button class="btn sec sm" data-mentoradd="1" style="margin-top:10px">+ Agregar mentoría</button>
+    </div>
     <div class="card c-gas">
       <div class="row"><b>⛽ Gasolina</b><span class="lbl">tope ${fmt(cfg.gasTope)}</span></div>
       <div class="lbl" style="margin-top:8px">${c.gasRest<0?"Te pasaste por":"Te queda para gasolina"}</div>
@@ -571,16 +585,16 @@ function openFijo(id){
     <label>¿Cuánto pagaste? ($)</label><input id="fp-m" inputmode="decimal" value="${f.monto}" autofocus>
     <button class="btn" id="fp-ok" data-id="${id}" style="margin-top:16px">Marcar como pagado</button>`);
 }
-function openFijoEdit(id, app, grupo){
+function openFijoEdit(id, app, grupo, mentor){
   const f = id ? D.cfg.fijos.find(x=>x.id===id) : {nombre:"", monto:"", aprox:false}; if(!f) return;
-  const esApp = !!(app || f.app);
-  sheet(`<h2 style="margin-top:0">${esApp ? (id?"Editar app":"Nueva app") : (id?"Editar gasto fijo":"Nuevo gasto fijo")}</h2>
-    <label>Nombre</label><input id="fx-n" maxlength="40" value="${esc(f.nombre)}" placeholder="${esApp?"Ej: ChatGPT, CapCut, ManyChat":""}">
+  const esApp = !!(app || f.app), esMentor = !!(mentor || f.mentor);
+  sheet(`<h2 style="margin-top:0">${esMentor ? (id?"Editar mentoría":"Nueva mentoría") : esApp ? (id?"Editar app":"Nueva app") : (id?"Editar gasto fijo":"Nuevo gasto fijo")}</h2>
+    <label>${esMentor?"¿De quién es la mentoría?":"Nombre"}</label><input id="fx-n" maxlength="40" value="${esc(f.nombre)}" placeholder="${esMentor?"Ej: Ismael":esApp?"Ej: ChatGPT, CapCut, ManyChat":""}">
     ${esApp ? `<label>Tipo de app</label><select id="fx-g">${GRUPOS.map(([k,n])=>`<option value="${k}" ${(f.grupo||grupo||"infoproductos")===k?"selected":""}>${n}</option>`).join("")}</select>` : ""}
     <label>Monto al mes ($)</label><input id="fx-m" inputmode="decimal" value="${f.monto}">
     <label>¿El monto cambia cada mes?</label><select id="fx-a"><option value="0" ${f.aprox?"":"selected"}>No, es fijo</option><option value="1" ${f.aprox?"selected":""}>Sí, es aproximado</option></select>
-    <button class="btn" id="fx-save" data-id="${id||""}" data-app="${esApp?"1":""}" style="margin-top:16px">Guardar</button>
-    ${id?`<button class="btn del" id="fx-del" data-id="${id}" style="margin-top:10px">${esApp?"Quitar esta app":"Quitar este gasto"}</button>`:""}`);
+    <button class="btn" id="fx-save" data-id="${id||""}" data-app="${esApp?"1":""}" data-mentor="${esMentor?"1":""}" style="margin-top:16px">Guardar</button>
+    ${id?`<button class="btn del" id="fx-del" data-id="${id}" style="margin-top:10px">${esMentor?"Quitar esta mentoría":esApp?"Quitar esta app":"Quitar este gasto"}</button>`:""}`);
 }
 let GID = null;
 function openGas(edit){
@@ -644,6 +658,7 @@ document.addEventListener("click", e => {
   if(ds.t && t.closest("#f-seg")){ F.t = ds.t; return pintaForm(); }
   if(ds.cat){ if(ds.cat==="Gasolina" && F.t==="g" && !F.id){ close(); return openGas(); } F.cat = ds.cat; return pintaForm(); }
   if(ds.appadd) return openFijoEdit(null, true, ds.appadd);
+  if(ds.mentoradd) return openFijoEdit(null, false, null, true);
   if(ds.fijoedit) return openFijoEdit(ds.fijoedit);
   if(ds.fijo) return openFijo(ds.fijo);
   if(ds.pagar) return openPagar(ds.pagar);
@@ -654,7 +669,7 @@ document.addEventListener("click", e => {
     case "s-ok": {
       const ing = num($("#s-ing").value), aho = Math.min(95, Math.max(0, Math.round(num($("#s-aho").value))));
       if(ing<=0){ toast("Escribe cuánto ganas al mes."); return; }
-      D.cfg = {...planBase(), appsV2:true, ingreso:ing, ahorroPct:aho, ingresos:{[hoy().slice(0,7)]:ing}};
+      D.cfg = {...planBase(), appsV2:true, mentoriaV1:true, ingreso:ing, ahorroPct:aho, ingresos:{[hoy().slice(0,7)]:ing}};
       const caja = num($("#s-caja").value);
       if(caja>0) D.movs.push({id:uid(), t:"i", m:caja, cat:"Otro ingreso", nota:"Plata que ya tenía", f:hoy(), ts:Date.now(), ini:true});
       save(); render(); return toast("¡Listo! Toca + para anotar un gasto.");
@@ -704,7 +719,7 @@ document.addEventListener("click", e => {
     case "fx-save": {
       const n = $("#fx-n").value.trim(), m = r2(num($("#fx-m").value)), ap = $("#fx-a").value==="1", g = $("#fx-g") ? $("#fx-g").value : undefined; if(!n || m<=0){ toast("Pon el nombre y el monto."); return; }
       if(ds.id) D.cfg.fijos = D.cfg.fijos.map(f => f.id===ds.id ? {...f, nombre:n, monto:m, aprox:ap, ...(g?{grupo:g}:{})} : f);
-      else D.cfg.fijos.push(ds.app ? {id:uid(), nombre:n, monto:m, cat:"Apps", ico:"📱", aprox:ap, app:true, grupo:g||"infoproductos"} : {id:uid(), nombre:n, monto:m, cat:"Servicios", ico:"📌", aprox:ap});
+      else D.cfg.fijos.push(ds.mentor ? {id:uid(), nombre:n, monto:m, cat:"Mentoría", ico:"🎓", aprox:ap, mentor:true} : ds.app ? {id:uid(), nombre:n, monto:m, cat:"Apps", ico:"📱", aprox:ap, app:true, grupo:g||"infoproductos"} : {id:uid(), nombre:n, monto:m, cat:"Servicios", ico:"📌", aprox:ap});
       save(); close(); render(); return toast("Guardado ✓");
     }
     case "fx-del": { D.cfg.fijos = D.cfg.fijos.filter(f=>f.id!==ds.id); save(); close(); render(); return toast("Quitado."); }
