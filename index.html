@@ -18,7 +18,7 @@ main{max-width:640px;margin:0 auto;padding:18px 16px}
 h1{font-size:13px;font-weight:800;color:var(--main);margin:6px 0 14px;letter-spacing:.14em}
 h2{font-size:18px;margin:24px 0 10px;font-weight:800}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:var(--sh)}
-.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-deuda{border-top:5px solid #e11d48}
+.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-app{border-top:5px solid #14b8a6}.card.c-deuda{border-top:5px solid #e11d48}
 .hero{background:var(--grad);color:#fff;border:0;box-shadow:0 14px 34px rgba(124,58,237,.38);position:relative;overflow:hidden}
 .hero:after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.14)}
 .hero.bad{background:linear-gradient(135deg,#e11d48,#f97316);box-shadow:0 14px 34px rgba(225,29,72,.35)}
@@ -81,7 +81,7 @@ const KEY = "micaja3";
 const $ = s => document.querySelector(s);
 const CATS = [
   ["Comer afuera","🍔"],["Salidas","🎉"],["Gasolina","⛽"],["Mercado","🛒"],
-  ["Salud y gym","💪"],["Negocio","💼"],["Personal","🧴"],["Otros","📦"]
+  ["Salud y gym","💪"],["Negocio","💼"],["Apps","📱"],["Personal","🧴"],["Otros","📦"]
 ];
 const ICO = Object.fromEntries(CATS.concat([["Deudas","💳"],["Ingreso","💰"],["Servicios","🏠"]]));
 const ING_CATS = [["Pago","💰"],["Ventas","🛍️"],["Otro ingreso","🎁"]];
@@ -328,8 +328,12 @@ function vMovs(){
 
 function vGastos(){
   const c = calc(), cfg = D.cfg;
+  const fijoRow = f => `<div class="mov" data-fijo="${f.id}"><div class="ico">${f.ico||"📌"}</div><div class="t"><b>${esc(f.nombre)}</b><span>${f.aprox?"Aproximado · cambia con la tasa":"Fijo"}</span></div><div style="text-align:right"><div class="amt">${fmt(f.pagado?f.real:f.monto)}</div><span class="pill ${f.pagado?"":"warn"}">${f.pagado?"Pagado ✓":"Pendiente"}</span></div><button data-fijoedit="${f.id}" aria-label="Editar" style="border:0;background:none;font-size:18px">✏️</button></div>`;
   const fx = cfg.fijos.map(f => { const pagos = c.delMes.filter(m=>m.fijoId===f.id); return {...f, pagado: pagos.length>0, real: sum(pagos,m=>m.m)}; });
-  const totalFijos = sum(fx, f => f.pagado ? f.real : f.monto), pagadoFijos = sum(fx.filter(f=>f.pagado), f=>f.real);
+  const fxF = fx.filter(f=>!f.app), fxA = fx.filter(f=>f.app);
+  const totalFijos = sum(fxF, f => f.pagado ? f.real : f.monto), pagadoFijos = sum(fxF.filter(f=>f.pagado), f=>f.real);
+  const totalApps = sum(fxA, f => f.pagado ? f.real : f.monto), pagadoApps = sum(fxA.filter(f=>f.pagado), f=>f.real);
+  const appsMes = sum(c.gastos.filter(m=>m.cat==="Apps"), m=>m.m);
   const gas = c.delMes.filter(m=>m.cat==="Gasolina" && m.t==="g").sort((a,b)=>b.f.localeCompare(a.f)||b.ts-a.ts);
   const litros = r2(sum(gas, m=>m.litros||0));
   const gPct = cfg.gasTope>0 ? Math.min(100, c.gasGastado/cfg.gasTope*100) : 0;
@@ -338,10 +342,16 @@ function vGastos(){
   return `
     <h1>MIS GASTOS DEL MES</h1>
     <div class="card c-fijo">
-      <div class="row"><b>📌 Gastos fijos</b><span class="pill ${fx.every(f=>f.pagado)?"":"warn"}">${fx.filter(f=>f.pagado).length} de ${fx.length} pagados</span></div>
+      <div class="row"><b>📌 Gastos fijos</b><span class="pill ${fxF.every(f=>f.pagado)?"":"warn"}">${fxF.filter(f=>f.pagado).length} de ${fxF.length} pagados</span></div>
       <div class="lbl" style="margin:4px 0 6px">Pagado ${fmt(pagadoFijos)} de ${fmt(totalFijos)}. Toca uno para marcarlo como pagado.</div>
-      ${fx.map(f=>`<div class="mov" data-fijo="${f.id}"><div class="ico">${f.ico||"📌"}</div><div class="t"><b>${esc(f.nombre)}</b><span>${f.aprox?"Aproximado · cambia con la tasa":"Fijo"}</span></div><div style="text-align:right"><div class="amt">${fmt(f.pagado?f.real:f.monto)}</div><span class="pill ${f.pagado?"":"warn"}">${f.pagado?"Pagado ✓":"Pendiente"}</span></div><button data-fijoedit="${f.id}" aria-label="Editar" style="border:0;background:none;font-size:18px">✏️</button></div>`).join("")}
+      ${fxF.map(fijoRow).join("")}
       <button class="btn sec sm" id="fx-add" style="margin-top:10px">+ Agregar gasto fijo</button>
+    </div>
+    <div class="card c-app">
+      <div class="row"><b>📱 Gasto en apps</b><span class="pill ${fxA.every(f=>f.pagado)?"":"warn"}">${fxA.filter(f=>f.pagado).length} de ${fxA.length} pagadas</span></div>
+      <div class="lbl" style="margin:4px 0 6px">Este mes llevas <b>${fmt(appsMes)}</b> en apps. Suscripciones: ${fmt(pagadoApps)} pagado de ${fmt(totalApps)}.</div>
+      ${fxA.length ? fxA.map(fijoRow).join("") : `<div class="empty" style="padding:14px 6px">Aún no anotas ninguna.<br>Agrega las apps que pagas cada mes (por ejemplo ChatGPT, CapCut o ManyChat).</div>`}
+      <button class="btn sm" id="app-add" style="margin-top:10px">+ Agregar app</button>
     </div>
     <div class="card c-gas">
       <div class="row"><b>⛽ Gasolina</b><span class="lbl">tope ${fmt(cfg.gasTope)}</span></div>
@@ -439,6 +449,8 @@ function vConsejos(){
   }
   const meta = r2(c.baseIng*cfg.ahorroPct/100);
   if(c.entro>0){ const real = c.ahorroReal; add(real>=meta?"🏆":"🎯", real>=meta?"":"warn", `Tu meta de ahorro es <b>${fmt(meta)}</b> al mes. Llevas <b>${fmt(real)}</b>.${real<meta?" Aparta ya lo que puedas: lo que ahorras primero no se gasta.":""}`); }
+  const appsTot = sum(cfg.fijos.filter(f=>f.app), f=>f.monto);
+  if(appsTot>0) add("📱","warn",`Tus apps cuestan <b>${fmt(appsTot)}</b> al mes, unos <b>${fmt(appsTot*12)}</b> al año. Revisa cuáles usas de verdad y cancela las que no.`);
   const activas = D.deudas.map(d=>({...d,resta:debeDe(d)})).filter(d=>d.resta>0);
   if(activas.length){ const d = activas.sort((a,b)=>a.resta-b.resta)[0]; add("💳","",`Termina primero <b>${esc(d.nombre)}</b> (${fmt(d.resta)}). Una deuda menos es una cuota menos cada mes.`); }
   add("💡","",`<b>Regla fácil:</b> apenas te paguen, aparta el ${cfg.ahorroPct} % y vive con el resto. No esperes a fin de mes para ver qué sobró.`);
@@ -497,14 +509,15 @@ function openFijo(id){
     <label>¿Cuánto pagaste? ($)</label><input id="fp-m" inputmode="decimal" value="${f.monto}" autofocus>
     <button class="btn" id="fp-ok" data-id="${id}" style="margin-top:16px">Marcar como pagado</button>`);
 }
-function openFijoEdit(id){
+function openFijoEdit(id, app){
   const f = id ? D.cfg.fijos.find(x=>x.id===id) : {nombre:"", monto:"", aprox:false}; if(!f) return;
-  sheet(`<h2 style="margin-top:0">${id?"Editar gasto fijo":"Nuevo gasto fijo"}</h2>
-    <label>Nombre</label><input id="fx-n" maxlength="40" value="${esc(f.nombre)}">
+  const esApp = !!(app || f.app);
+  sheet(`<h2 style="margin-top:0">${esApp ? (id?"Editar app":"Nueva app") : (id?"Editar gasto fijo":"Nuevo gasto fijo")}</h2>
+    <label>Nombre</label><input id="fx-n" maxlength="40" value="${esc(f.nombre)}" placeholder="${esApp?"Ej: ChatGPT, CapCut, ManyChat":""}">
     <label>Monto al mes ($)</label><input id="fx-m" inputmode="decimal" value="${f.monto}">
     <label>¿El monto cambia cada mes?</label><select id="fx-a"><option value="0" ${f.aprox?"":"selected"}>No, es fijo</option><option value="1" ${f.aprox?"selected":""}>Sí, es aproximado</option></select>
-    <button class="btn" id="fx-save" data-id="${id||""}" style="margin-top:16px">Guardar</button>
-    ${id?`<button class="btn del" id="fx-del" data-id="${id}" style="margin-top:10px">Quitar este gasto</button>`:""}`);
+    <button class="btn" id="fx-save" data-id="${id||""}" data-app="${esApp?"1":""}" style="margin-top:16px">Guardar</button>
+    ${id?`<button class="btn del" id="fx-del" data-id="${id}" style="margin-top:10px">${esApp?"Quitar esta app":"Quitar este gasto"}</button>`:""}`);
 }
 let GID = null;
 function openGas(edit){
@@ -607,6 +620,7 @@ document.addEventListener("click", e => {
     case "g-add": return openGas();
     case "calle-add": return openAdd(null, "Comer afuera");
     case "fx-add": return openFijoEdit();
+    case "app-add": return openFijoEdit(null, true);
     case "fp-ok": {
       const f = D.cfg.fijos.find(x=>x.id===ds.id), m = r2(num($("#fp-m").value)); if(!f || m<=0){ toast("Escribe cuánto pagaste."); return; }
       D.movs.push({id:uid(), t:"g", m, cat:f.cat, nota:f.nombre, f:hoy(), ts:Date.now(), fijoId:f.id});
@@ -615,7 +629,7 @@ document.addEventListener("click", e => {
     case "fx-save": {
       const n = $("#fx-n").value.trim(), m = r2(num($("#fx-m").value)), ap = $("#fx-a").value==="1"; if(!n || m<=0){ toast("Pon el nombre y el monto."); return; }
       if(ds.id) D.cfg.fijos = D.cfg.fijos.map(f => f.id===ds.id ? {...f, nombre:n, monto:m, aprox:ap} : f);
-      else D.cfg.fijos.push({id:uid(), nombre:n, monto:m, cat:"Servicios", ico:"📌", aprox:ap});
+      else D.cfg.fijos.push(ds.app ? {id:uid(), nombre:n, monto:m, cat:"Apps", ico:"📱", aprox:ap, app:true} : {id:uid(), nombre:n, monto:m, cat:"Servicios", ico:"📌", aprox:ap});
       save(); close(); render(); return toast("Guardado ✓");
     }
     case "fx-del": { D.cfg.fijos = D.cfg.fijos.filter(f=>f.id!==ds.id); save(); close(); render(); return toast("Quitado."); }
