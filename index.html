@@ -189,6 +189,12 @@ const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y
 const diaLargo = s => { const d = parse(s); return s===hoy() ? "Hoy" : DIAS[d.getDay()]+" "+d.getDate()+" de "+MESES[d.getMonth()]; };
 
 // ---------- cálculos (todo sale de aquí) ----------
+function ahorroPctEf(baseIng){
+  const cfg = D.cfg; if(cfg.ahorroModo==="fijo" || baseIng<=0) return cfg.ahorroPct;
+  const libre = baseIng - sum(cfg.fijos,f=>f.monto) - cfg.gasTope - cfg.calleTope;
+  const adapt = Math.floor(Math.max(0,libre)/2/baseIng*100);
+  return Math.max(Math.min(cfg.ahorroMin ?? 10, cfg.ahorroPct), Math.min(cfg.ahorroPct, adapt));
+}
 function calc(){
   const now = new Date(), mes = hoy().slice(0,7), cfg = D.cfg;
   const delMes = D.movs.filter(m => m.f.startsWith(mes));
@@ -196,7 +202,7 @@ function calc(){
   const gastado = sum(gastos, m=>m.m), entro = sum(ingresos, m=>m.m);
   const ingEst = ingresoMes(mes), ingFalta = (cfg.ingresos||{})[mes] == null;
   const baseIng = Math.max(ingEst, entro);
-  const presupuesto = r2(baseIng*(1-cfg.ahorroPct/100));
+  const ahorroPct = ahorroPctEf(baseIng), presupuesto = r2(baseIng*(1-ahorroPct/100));
   const diasMes = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
   const diasQuedan = diasMes - now.getDate() + 1;
   // lo reservado: fijos sin pagar + lo que falta de la gasolina
@@ -215,7 +221,7 @@ function calc(){
   const caja = r2(sum(D.movs, m => m.t==="i" ? m.m : -m.m));
   const porCat = {};
   gastos.forEach(m => porCat[m.cat] = (porCat[m.cat]||0) + m.m);
-  return {ingEst, ingFalta, mes, delMes, gastos, gastado, entro, baseIng, presupuesto, quedaMes, quedaLibre, diasQuedan, diasMes, gastadoHoy, hoyPuedo, cierre, caja, porCat, ahorroReal: r2(entro - gastado), fijosPend, gasGastado, gasRest, gasPend, calleGastado, calleRest};
+  return {ahorroPct, ingEst, ingFalta, mes, delMes, gastos, gastado, entro, baseIng, presupuesto, quedaMes, quedaLibre, diasQuedan, diasMes, gastadoHoy, hoyPuedo, cierre, caja, porCat, ahorroReal: r2(entro - gastado), fijosPend, gasGastado, gasRest, gasPend, calleGastado, calleRest};
 }
 function ingresoMes(mes){
   const k = D.cfg.ingresos || {};
@@ -246,9 +252,9 @@ function renderSetup(){
       <p class="lbl" style="margin-top:0">Solo tres datos. Tus gastos fijos ya vienen cargados y los ajustas en la pestaña Gastos.</p>
       <label>¿Cuánto ganas al mes, aprox.? ($)</label>
       <input id="s-ing" inputmode="decimal" placeholder="1050">
-      <label>¿Qué parte quieres ahorrar? (%)</label>
+      <label>¿Cuánto te gustaría ahorrar como máximo? (%)</label>
       <input id="s-aho" inputmode="numeric" value="50">
-      <p class="lbl">Ahorrar 50 % significa gastar máximo la mitad de lo que ganas.</p>
+      <p class="lbl">Es tu ideal. La app lo ajusta sola a lo que de verdad puedes ahorrar según tus gastos fijos y lo que ganes cada mes, así no te frustras.</p>
       <label>¿Cuánta plata tienes hoy en total? ($)</label>
       <input id="s-caja" inputmode="decimal" placeholder="0">
       <button class="btn" id="s-ok" style="margin-top:18px">Empezar</button>
@@ -455,7 +461,7 @@ function vDeudas(){
 }
 
 function planAhorro(c){
-  const cfg = D.cfg, meta = r2(c.baseIng*cfg.ahorroPct/100);
+  const cfg = D.cfg, meta = r2(c.baseIng*c.ahorroPct/100);
   if(c.baseIng<=0) return `<div class="card hero"><div class="lbl">Tu plan de ahorro</div><div style="font-size:22px;font-weight:800;margin:6px 0 12px">Primero dime cuánto vas a ganar este mes y te armo el plan.</div><button class="btn sm" id="ing-mes" style="background:#fff;color:var(--main);box-shadow:none">¿Cuánto ganas?</button></div>`;
   const proy = r2(c.baseIng - c.cierre), semana = r2(meta/(c.diasMes/7)), dia = r2(meta/c.diasMes);
   const pct = meta>0 ? Math.max(0, Math.min(100, proy/meta*100)) : 0, falta = r2(meta - proy);
@@ -469,7 +475,7 @@ function planAhorro(c){
       <div class="lbl">Te recomiendo ahorrar este mes</div>
       <div class="big">${fmt(meta)}</div>
       <div style="margin-top:8px;font-weight:700">Aparta ${fmt(semana)} cada semana (${fmt(dia)} al día)</div>
-      <div class="lbl" style="margin-top:4px">Es el ${cfg.ahorroPct} % de tus ${fmt(c.baseIng)}. Apártalo apenas cobres, antes de gastar.</div>
+      <div class="lbl" style="margin-top:4px">Es el ${c.ahorroPct} % de tus ${fmt(c.baseIng)}${cfg.ahorroModo==='fijo'?'':' (se ajusta solo a tus fijos y a lo que ganas; tu ideal es '+cfg.ahorroPct+' %)'}. Apártalo apenas cobres, antes de gastar.</div>
     </div>
     <div class="card">
       <div class="row"><b>Cómo vas</b><span class="pill ${proy>=meta?"":"warn"}">${proy>=meta?"Vas a cumplir":"Te faltaría"}</span></div>
@@ -503,13 +509,13 @@ function vConsejos(){
     const chicos = c.gastos.filter(m=>m.m<=5);
     if(chicos.length>=8) add("🐜","warn",`Tienes ${chicos.length} gastos chiquitos (de $5 o menos) que suman <b>${fmt(sum(chicos,m=>m.m))}</b>. Los gastos hormiga pasan desapercibidos y suman.`);
   }
-  const meta = r2(c.baseIng*cfg.ahorroPct/100);
+  const meta = r2(c.baseIng*c.ahorroPct/100);
   if(c.entro>0){ const real = c.ahorroReal; add(real>=meta?"🏆":"🎯", real>=meta?"":"warn", `Tu meta de ahorro es <b>${fmt(meta)}</b> al mes. Llevas <b>${fmt(real)}</b>.${real<meta?" Aparta ya lo que puedas: lo que ahorras primero no se gasta.":""}`); }
   const appsTot = sum(cfg.fijos.filter(f=>f.app), f=>f.monto);
   if(appsTot>0) add("📱","warn",`Tus apps cuestan <b>${fmt(appsTot)}</b> al mes, unos <b>${fmt(appsTot*12)}</b> al año. Revisa cuáles usas de verdad y cancela las que no.`);
   const activas = D.deudas.map(d=>({...d,resta:debeDe(d)})).filter(d=>d.resta>0);
   if(activas.length){ const d = activas.sort((a,b)=>a.resta-b.resta)[0]; add("💳","",`Termina primero <b>${esc(d.nombre)}</b> (${fmt(d.resta)}). Una deuda menos es una cuota menos cada mes.`); }
-  add("💡","",`<b>Regla fácil:</b> apenas te paguen, aparta el ${cfg.ahorroPct} % y vive con el resto. No esperes a fin de mes para ver qué sobró.`);
+  add("💡","",`<b>Regla fácil:</b> apenas te paguen, aparta el ${c.ahorroPct} % y vive con el resto. No esperes a fin de mes para ver qué sobró.`);
   add("🧠","",`Antes de una compra que no es necesaria, espera 24 horas. Si al día siguiente todavía la quieres, hazla; muchas veces se te pasa.`);
   return `<h1>MI PLAN DE AHORRO</h1>${planAhorro(c)}<h2>Consejos para ti</h2>${t.join("")}`;
 }
@@ -613,7 +619,9 @@ function openDeuda(){
 function openCfg(){
   sheet(`<h2 style="margin-top:0">Mi plan</h2>
     <label>Lo que gano normalmente al mes ($)</label><input id="c-ing" inputmode="decimal" value="${D.cfg.ingreso}">
-    <label>Lo que quiero ahorrar (%)</label><input id="c-aho" inputmode="numeric" value="${D.cfg.ahorroPct}">
+    <label>¿Cómo quieres ahorrar?</label><select id="c-modo"><option value="flex" ${D.cfg.ahorroModo==="fijo"?"":"selected"}>Adaptable: me ajusta según lo que gano y mis fijos (recomendado)</option><option value="fijo" ${D.cfg.ahorroModo==="fijo"?"selected":""}>Siempre el mismo porcentaje</option></select>
+    <label>Ahorro ideal, el máximo (%)</label><input id="c-aho" inputmode="numeric" value="${D.cfg.ahorroPct}">
+    <label>Ahorro mínimo, aunque sea un mes duro (%)</label><input id="c-min" inputmode="numeric" value="${D.cfg.ahorroMin ?? 10}">
     <label>Tope de gasolina al mes ($)</label><input id="c-gas" inputmode="decimal" value="${D.cfg.gasTope}">
     <label>Tope de comer afuera y salir al mes ($)</label><input id="c-calle" inputmode="decimal" value="${D.cfg.calleTope}">
     <button class="btn" id="c-ok" style="margin-top:16px">Guardar</button>`);
@@ -710,7 +718,7 @@ document.addEventListener("click", e => {
     case "b-cfg": return openCfg();
     case "c-ok": {
       const ing = num($("#c-ing").value); if(ing<=0){ toast("Escribe cuánto ganas."); return; }
-      D.cfg = {...D.cfg, ingreso:ing, ingresos:{...(D.cfg.ingresos||{}), [hoy().slice(0,7)]:ing}, ahorroPct:Math.min(95,Math.max(0,Math.round(num($("#c-aho").value)))), gasTope:num($("#c-gas").value), calleTope:num($("#c-calle").value)}; save(); close(); render(); return toast("Plan guardado ✓");
+      D.cfg = {...D.cfg, ingreso:ing, ingresos:{...(D.cfg.ingresos||{}), [hoy().slice(0,7)]:ing}, ahorroPct:Math.min(95,Math.max(0,Math.round(num($("#c-aho").value)))), ahorroModo:$("#c-modo").value, ahorroMin:Math.min(95,Math.max(0,Math.round(num($("#c-min").value)))), gasTope:num($("#c-gas").value), calleTope:num($("#c-calle").value)}; save(); close(); render(); return toast("Plan guardado ✓");
     }
     case "b-exp": {
       const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],{type:"application/json"}));
