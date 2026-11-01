@@ -18,7 +18,7 @@ main{max-width:640px;margin:0 auto;padding:18px 16px}
 h1{font-size:13px;font-weight:800;color:var(--main);margin:6px 0 14px;letter-spacing:.14em}
 h2{font-size:18px;margin:24px 0 10px;font-weight:800}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:var(--sh)}
-.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-app{border-top:5px solid #14b8a6}.card.c-deuda{border-top:5px solid #e11d48}
+.card.c-fijo{border-top:5px solid #3b82f6}.card.c-gas{border-top:5px solid #f97316}.card.c-calle{border-top:5px solid #ec4899}.card.c-app{border-top:5px solid #14b8a6}.card.c-deuda{border-top:5px solid #e11d48}.card.c-zelle{border-top:5px solid #8b5cf6}
 .hero{background:var(--grad);color:#fff;border:0;box-shadow:0 14px 34px rgba(124,58,237,.38);position:relative;overflow:hidden}
 .hero:after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.14)}
 .hero.bad{background:linear-gradient(135deg,#e11d48,#f97316);box-shadow:0 14px 34px rgba(225,29,72,.35)}
@@ -347,6 +347,39 @@ function vMovs(){
       <button class="btn del sm" id="b-cero" style="margin-top:10px">Poner todo en cero</button></div>`;
 }
 
+function zelleCard(){
+  const mk = hoy().slice(0,7), todos = (D.zelle||[]).slice().sort((a,b)=>b.f.localeCompare(a.f)||b.ts-a.ts);
+  const mes = todos.filter(z=>z.f.startsWith(mk));
+  const pierdeMes = r2(sum(mes,z=>z.zelle-z.usdt)), zMes = sum(mes,z=>z.zelle);
+  const pierdeTodo = r2(sum(todos,z=>z.zelle-z.usdt)), zTodo = sum(todos,z=>z.zelle);
+  const pct = zMes>0 ? (pierdeMes/zMes*100).toFixed(1).replace(".",",") : "0";
+  return `<div class="card c-zelle">
+      <div class="row"><b>💱 Comisión de Zelle a USDT</b><span class="lbl">lo que pierdes al cambiar</span></div>
+      <div class="lbl" style="margin-top:8px">Este mes has perdido</div>
+      <div class="big" style="color:${pierdeMes>0?"var(--bad)":"var(--main)"}">${fmt(pierdeMes)}</div>
+      <div class="row lbl"><span>${mes.length?`Cambiaste ${fmt(zMes)} · pierdes el ${pct} %`:"Aún no anotas cambios este mes"}</span><span>Total: ${fmt(pierdeTodo)}${zTodo>0?` (${(pierdeTodo/zTodo*100).toFixed(1).replace(".",",")} %)`:""}</span></div>
+      ${todos.slice(0,6).map(z=>`<div class="mov" data-zelle="${z.id}"><div class="ico">💱</div><div class="t"><b>${fmt(z.zelle)} → ${String(z.usdt).replace(".",",")} USDT</b><span>${diaLargo(z.f)} · ${z.zelle>0?((z.zelle-z.usdt)/z.zelle*100).toFixed(1).replace(".",","):0} % de comisión</span></div><div class="amt" style="color:var(--bad)">-${fmt(z.zelle-z.usdt)}</div></div>`).join("")}
+      <button class="btn sm" id="z-add" style="margin-top:10px">+ Anotar cambio</button>
+    </div>`;
+}
+let ZID = null;
+function openZelle(edit){
+  ZID = edit ? edit.id : null;
+  const z = edit || {f:hoy(), zelle:"", usdt:""};
+  sheet(`<h2 style="margin-top:0">💱 Cambio de Zelle a USDT</h2>
+    <label>Fecha</label><input type="date" id="z-f" value="${z.f}">
+    <label>Dólares que cambiaste en Zelle ($)</label><input id="z-z" inputmode="decimal" value="${z.zelle}" placeholder="Ej: 100" autofocus>
+    <label>USDT que recibiste</label><input id="z-u" inputmode="decimal" value="${z.usdt}" placeholder="Ej: 96">
+    <div id="z-aviso" class="lbl" style="margin:12px 0"></div>
+    <button class="btn" id="z-ok">${edit?"Guardar cambios":"Guardar cambio"}</button>
+    ${edit?`<button class="btn del" id="z-del" style="margin-top:10px">Borrar</button>`:""}`);
+  zAviso();
+}
+function zAviso(){
+  const a = $("#z-aviso"); if(!a) return;
+  const z = num($("#z-z").value), u = num($("#z-u").value);
+  a.innerHTML = z<=0||u<=0 ? "Escribe lo que cambiaste y lo que te llegó. Yo calculo cuánto pierdes." : u>z ? "Recibiste más de lo que cambiaste. Revisa los números." : `Pierdes <b style="color:var(--bad)">${fmt(r2(z-u))}</b> (${((z-u)/z*100).toFixed(1).replace(".",",")} %).`;
+}
 function vGastos(){
   const c = calc(), cfg = D.cfg;
   const grupoApps = GRUPOS.concat([["otras","Otras apps","📱"]]);
@@ -375,6 +408,7 @@ function vGastos(){
       ${grupoApps.map(([k,n,ic]) => { const l = fxA.filter(f => (f.grupo||"otras")===k); if(!l.length && k==="otras") return "";
         return `<div class="row" style="margin-top:16px"><b>${ic} ${n}</b><span class="pill">${fmt(sum(l,f=>f.monto))} al mes</span></div>${l.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay apps aquí.</div>`}<button class="btn sec sm" data-appadd="${k}" style="margin-top:8px">+ Agregar en ${n.replace("Apps de ","").replace("Apps ","")}</button>`; }).join("")}
     </div>
+    ${zelleCard()}
     <div class="card c-gas">
       <div class="row"><b>⛽ Gasolina</b><span class="lbl">tope ${fmt(cfg.gasTope)}</span></div>
       <div class="lbl" style="margin-top:8px">${c.gasRest<0?"Te pasaste por":"Te queda para gasolina"}</div>
@@ -593,8 +627,9 @@ function openMov(id){
 
 // ---------- eventos ----------
 document.addEventListener("click", e => {
-  const t = e.target.closest("button, [data-mov], [data-fijo], [data-tab], a"); if(!t) return;
+  const t = e.target.closest("button, [data-mov], [data-fijo], [data-zelle], [data-tab], a"); if(!t) return;
   const ds = t.dataset;
+  if(ds.zelle){ const z = (D.zelle||[]).find(x=>x.id===ds.zelle); if(z) return openZelle(z); }
   if(t.id==="fab") return openAdd();
   if(ds.tab){ tab = ds.tab; return render(); }
   if(ds.mov) return openMov(ds.mov);
@@ -642,6 +677,15 @@ document.addEventListener("click", e => {
       save(); close(); render(); return toast("Ingreso del mes guardado ✓");
     }
     case "g-add": return openGas();
+    case "z-add": return openZelle();
+    case "z-ok": {
+      const z = r2(num($("#z-z").value)), u = r2(num($("#z-u").value)); if(z<=0||u<=0){ toast("Escribe los dos montos."); return; } if(u>z){ toast("Los USDT no pueden ser más que los dólares."); return; }
+      const old = ZID && (D.zelle||[]).find(x=>x.id===ZID);
+      const reg = {id:ZID||uid(), zelle:z, usdt:u, f:$("#z-f").value||hoy(), ts:old?old.ts:Date.now()};
+      D.zelle = old ? D.zelle.map(x=>x.id===ZID?reg:x) : [...(D.zelle||[]), reg];
+      save(); close(); render(); return toast("Cambio guardado 💱");
+    }
+    case "z-del": { D.zelle = (D.zelle||[]).filter(x=>x.id!==ZID); save(); close(); render(); return toast("Borrado."); }
     case "calle-add": return openAdd(null, "Comer afuera");
     case "fx-add": return openFijoEdit();
     case "fp-ok": {
@@ -675,7 +719,7 @@ document.addEventListener("click", e => {
     case "b-imp": return $("#b-file").click();
     case "b-cero": {
       if(!confirm("¿Poner todo en cero?\n\nSe borran todos tus movimientos y deudas. Se quedan tu plan, tus fijos y tus topes.\nTe recomiendo descargar una copia antes.")) return;
-      D.movs = []; D.deudas = []; D.cfg.ingresos = {}; save(); render(); return toast("Todo en cero ✓");
+      D.movs = []; D.deudas = []; D.zelle = []; D.cfg.ingresos = {}; save(); render(); return toast("Todo en cero ✓");
     }
     case "n-open": case "s-nube": return openNube();
     case "n-login": return nubeEntrar(false);
@@ -684,16 +728,16 @@ document.addEventListener("click", e => {
     case "n-out": setSess(null); syncMsg = ""; render(); return toast("Saliste de la nube. Tus datos siguen en este aparato.");
   }
 });
-document.addEventListener("input", e => { if(e.target.id==="f-m") aviso(); if(["g-m","g-l","g-f"].includes(e.target.id)) gAviso(); });
+document.addEventListener("input", e => { if(e.target.id==="f-m") aviso(); if(["g-m","g-l","g-f"].includes(e.target.id)) gAviso(); if(["z-z","z-u"].includes(e.target.id)) zAviso(); });
 document.addEventListener("change", e => {
   if(e.target.id==="mes-sel"){ movMes = e.target.value; render(); }
   if(e.target.id==="b-file" && e.target.files[0]){
     const r = new FileReader();
-    r.onload = () => { try{ const d = JSON.parse(r.result); if(!d.cfg || !Array.isArray(d.movs)) throw 0; if(!confirm("Esto reemplaza lo que tienes ahora por la copia. ¿Seguro?")) return; D = normaliza({cfg:d.cfg, movs:d.movs, deudas:d.deudas||[], ultimaCopia:d.ultimaCopia}); save(); render(); toast("Copia cargada ✓"); }catch{ toast("Ese archivo no es una copia de Mi Caja."); } };
+    r.onload = () => { try{ const d = JSON.parse(r.result); if(!d.cfg || !Array.isArray(d.movs)) throw 0; if(!confirm("Esto reemplaza lo que tienes ahora por la copia. ¿Seguro?")) return; D = normaliza({cfg:d.cfg, movs:d.movs, deudas:d.deudas||[], zelle:d.zelle||[], ultimaCopia:d.ultimaCopia}); save(); render(); toast("Copia cargada ✓"); }catch{ toast("Ese archivo no es una copia de Mi Caja."); } };
     r.readAsText(e.target.files[0]);
   }
 });
-document.addEventListener("keydown", e => { if(e.key==="Enter" && e.target.tagName==="INPUT" && e.target.type!=="file"){ const ok = $("#modal #n-login, #modal #im-ok, #modal #f-ok, #modal #g-ok, #modal #fp-ok, #modal #fx-save, #modal #p-ok, #modal #n-ok, #modal #c-ok, #s-ok"); if(ok) ok.click(); } });
+document.addEventListener("keydown", e => { if(e.key==="Enter" && e.target.tagName==="INPUT" && e.target.type!=="file"){ const ok = $("#modal #n-login, #modal #im-ok, #modal #f-ok, #modal #g-ok, #modal #fp-ok, #modal #fx-save, #modal #z-ok, #modal #p-ok,#modal #n-ok, #modal #c-ok, #s-ok"); if(ok) ok.click(); } });
 
 try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch{}
 document.addEventListener("visibilitychange", () => { if(!document.hidden) pull(); });
