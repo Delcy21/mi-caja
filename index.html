@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#7c3aed">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Mi Caja</title>
 <script>window.MICAJA_SB = {url:"https://ivbcghqugaihdpgrceex.supabase.co", key:"sb_publishable_MneV4D8AwqxTMFyM4PseMA_fAgy6OX1"};</script>
 <style>
@@ -240,7 +240,7 @@ function render(){
 function renderSetup(){
   $("#fab").hidden = true; $("#nav").hidden = true;
   $("#app").innerHTML = `
-    <h1>MI CAJA</h1>
+    <div style="text-align:center"><img src="icon-192.png" alt="" width="96" height="96" style="border-radius:24px;box-shadow:0 8px 24px rgba(124,58,237,.35)"></div><h1 style="text-align:center">MI CAJA</h1>
     <div class="card">
       <div style="font-size:24px;font-weight:700;margin-bottom:6px">Hola 👋 Armemos tu caja</div>
       <p class="lbl" style="margin-top:0">Solo tres datos. Tus gastos fijos ya vienen cargados y los ajustas en la pestaña Gastos.</p>
