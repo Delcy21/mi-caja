@@ -197,16 +197,20 @@ const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y
 const diaLargo = s => { const d = parse(s); return s===hoy() ? "Hoy" : DIAS[d.getDay()]+" "+d.getDate()+" de "+MESES[d.getMonth()]; };
 
 // ---------- cálculos (todo sale de aquí) ----------
+// gasto del negocio (apps de Infoproductos y mentoría): no entra en el presupuesto personal
+const esNeg = f => !!(f.mentor || (f.app && f.grupo==="infoproductos"));
 function ahorroPctEf(baseIng){
   const cfg = D.cfg; if(cfg.ahorroModo==="fijo" || baseIng<=0) return cfg.ahorroPct;
-  const libre = baseIng - sum(cfg.fijos,f=>f.monto) - cfg.gasTope - cfg.calleTope;
+  const libre = baseIng - sum(cfg.fijos.filter(f=>!esNeg(f)),f=>f.monto) - cfg.gasTope - cfg.calleTope;
   const adapt = Math.floor(Math.max(0,libre)/2/baseIng*100);
   return Math.max(Math.min(cfg.ahorroMin ?? 10, cfg.ahorroPct), Math.min(cfg.ahorroPct, adapt));
 }
 function calc(){
   const now = new Date(), mes = hoy().slice(0,7), cfg = D.cfg;
   const delMes = D.movs.filter(m => m.f.startsWith(mes));
-  const gastos = delMes.filter(m => m.t==="g"), ingresos = delMes.filter(m => m.t==="i" && !m.ini);
+  const negIds = new Set(cfg.fijos.filter(esNeg).map(f=>f.id));
+  const negMovs = delMes.filter(m => m.t==="g" && m.fijoId && negIds.has(m.fijoId));
+  const gastos = delMes.filter(m => m.t==="g" && !negMovs.includes(m)), ingresos = delMes.filter(m => m.t==="i" && !m.ini);
   const gastado = sum(gastos, m=>m.m), entro = sum(ingresos, m=>m.m);
   const ingEst = ingresoMes(mes), ingFalta = (cfg.ingresos||{})[mes] == null;
   const baseIng = Math.max(ingEst, entro);
@@ -214,7 +218,8 @@ function calc(){
   const diasMes = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
   const diasQuedan = diasMes - now.getDate() + 1;
   // lo reservado: fijos sin pagar + lo que falta de la gasolina
-  const fijosPend = r2(sum(cfg.fijos.filter(f => !delMes.some(m=>m.fijoId===f.id)), f=>f.monto));
+  const fijosPend = r2(sum(cfg.fijos.filter(f => !esNeg(f) && !delMes.some(m=>m.fijoId===f.id)), f=>f.monto));
+  const negPagado = r2(sum(negMovs, m=>m.m)), negPend = r2(sum(cfg.fijos.filter(f => esNeg(f) && !delMes.some(m=>m.fijoId===f.id)), f=>f.monto));
   const gasGastado = sum(gastos.filter(m=>m.cat==="Gasolina"), m=>m.m);
   const gasRest = r2(cfg.gasTope - gasGastado), gasPend = Math.max(0, gasRest);
   const calleGastado = sum(gastos.filter(m=>CALLE.includes(m.cat)), m=>m.m), calleRest = r2(cfg.calleTope - calleGastado);
@@ -229,7 +234,7 @@ function calc(){
   const caja = r2(sum(D.movs, m => m.t==="i" ? m.m : -m.m));
   const porCat = {};
   gastos.forEach(m => porCat[m.cat] = (porCat[m.cat]||0) + m.m);
-  return {ahorroPct, ingEst, ingFalta, mes, delMes, gastos, gastado, entro, baseIng, presupuesto, quedaMes, quedaLibre, diasQuedan, diasMes, gastadoHoy, hoyPuedo, cierre, caja, porCat, ahorroReal: r2(entro - gastado), fijosPend, gasGastado, gasRest, gasPend, calleGastado, calleRest};
+  return {negPagado, negPend, ahorroPct, ingEst, ingFalta, mes, delMes, gastos, gastado, entro, baseIng, presupuesto, quedaMes, quedaLibre, diasQuedan, diasMes, gastadoHoy, hoyPuedo, cierre, caja, porCat, ahorroReal: r2(entro - gastado), fijosPend, gasGastado, gasRest, gasPend, calleGastado, calleRest};
 }
 function ingresoMes(mes){
   const k = D.cfg.ingresos || {};
@@ -303,6 +308,7 @@ function vInicio(){
       <div class="card mini g" data-tab="gastos" style="flex:1;margin:0 0 14px"><div class="lbl">⛽ Gasolina te queda</div><div style="font-size:26px;font-weight:800">${fmt(c.gasRest)}</div></div>
       <div class="card mini c" data-tab="gastos" style="flex:1;margin:0 0 14px"><div class="lbl">🍔 Comer y salir te queda</div><div style="font-size:26px;font-weight:800">${fmt(c.calleRest)}</div></div>
     </div>
+    ${c.negPagado+c.negPend>0?`<div class="card mini" data-tab="gastos" style="margin:0 0 14px"><div class="lbl">💼 Negocio este mes (no cuenta en tu presupuesto)</div><div class="row" style="margin-top:4px"><span>Pagado <b>${fmt(c.negPagado)}</b></span><span>Pendiente <b>${fmt(c.negPend)}</b></span></div></div>`:""}
     <h2>Últimos movimientos</h2>
     <div class="card" style="padding:6px 18px">${ult.length ? ult.map(movHtml).join("") : `<div class="empty">Aún no anotas nada.<br>Toca el <b>+</b> para empezar.</div>`}</div>`;
 }
@@ -420,11 +426,11 @@ function vGastos(){
       <div class="row"><b>📱 Gasto en apps</b><span class="pill ${fxA.every(f=>f.pagado)?"":"warn"}">${fxA.filter(f=>f.pagado).length} de ${fxA.length} pagadas</span></div>
       <div class="lbl" style="margin:4px 0 0">Este mes llevas <b>${fmt(appsMes)}</b> en apps. Todas juntas cuestan <b>${fmt(sum(fxA,f=>f.monto))}</b> al mes.</div>
       ${grupoApps.map(([k,n,ic]) => { const l = fxA.filter(f => (f.grupo||"otras")===k); if(!l.length && k==="otras") return "";
-        return `<div class="row" style="margin-top:16px"><b>${ic} ${n}</b><span class="pill">${fmt(sum(l,f=>f.monto))} al mes</span></div>${l.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay apps aquí.</div>`}<button class="btn sec sm" data-appadd="${k}" style="margin-top:8px">+ Agregar en ${n.replace("Apps de ","").replace("Apps ","")}</button>`; }).join("")}
+        return `<div class="row" style="margin-top:16px"><b>${ic} ${n}</b><span class="pill">${k==="infoproductos"?"💼 Negocio · ":""}${fmt(sum(l,f=>f.monto))} al mes</span></div>${l.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay apps aquí.</div>`}<button class="btn sec sm" data-appadd="${k}" style="margin-top:8px">+ Agregar en ${n.replace("Apps de ","").replace("Apps ","")}</button>`; }).join("")}
     </div>
     ${zelleCard()}
     <div class="card c-mentor">
-      <div class="row"><b>🎓 Pago de mentoría</b><span class="pill ${fxM.every(f=>f.pagado)?"":"warn"}">${fxM.filter(f=>f.pagado).length} de ${fxM.length} pagadas</span></div>
+      <div class="row"><b>🎓 Pago de mentoría</b> <span class="pill">💼 Negocio</span><span class="pill ${fxM.every(f=>f.pagado)?"":"warn"}">${fxM.filter(f=>f.pagado).length} de ${fxM.length} pagadas</span></div>
       <div class="lbl" style="margin:4px 0 6px">Este mes: <b>${fmt(sum(fxM,f=>f.pagado?f.real:f.monto))}</b>. Toca una para marcarla como pagada.</div>
       ${fxM.map(fijoRow).join("")||`<div class="lbl" style="padding:8px 0">Aún no hay mentorías.</div>`}
       <button class="btn sec sm" data-mentoradd="1" style="margin-top:10px">+ Agregar mentoría</button>
@@ -479,7 +485,7 @@ function planAhorro(c){
   if(c.baseIng<=0) return `<div class="card hero"><div class="lbl">Tu plan de ahorro</div><div style="font-size:22px;font-weight:800;margin:6px 0 12px">Primero dime cuánto vas a ganar este mes y te armo el plan.</div><button class="btn sm" id="ing-mes" style="background:#fff;color:var(--main);box-shadow:none">¿Cuánto ganas?</button></div>`;
   const proy = r2(c.baseIng - c.cierre), semana = r2(meta/(c.diasMes/7)), dia = r2(meta/c.diasMes);
   const pct = meta>0 ? Math.max(0, Math.min(100, proy/meta*100)) : 0, falta = r2(meta - proy);
-  const esenciales = r2(sum(cfg.fijos, f=>f.monto) + cfg.gasTope), fondo = r2(esenciales*3);
+  const esenciales = r2(sum(cfg.fijos.filter(f=>!esNeg(f)), f=>f.monto) + cfg.gasTope), fondo = r2(esenciales*3);
   const meses = meta>0 ? Math.ceil(fondo/meta) : null;
   const vcat = {};
   c.gastos.filter(m=>!m.fijoId && m.cat!=="Gasolina" && !m.debtId).forEach(m => vcat[m.cat] = (vcat[m.cat]||0) + m.m);
